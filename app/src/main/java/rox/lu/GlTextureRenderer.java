@@ -1,21 +1,28 @@
+/*
+
+  Debug drawer for textures
+  ==========================
+
+  Very basic helper that allows you to render the contents of a 
+  texture into the current viewport area. We create a VBO and the 
+  necessary shader. 
+
+ */
 package rox.lu;
 
-import android.content.Context;
 import android.opengl.GLES20;
-import android.util.Log;
-import android.opengl.GLSurfaceView;
-import android.opengl.GLES11Ext;
-import android.graphics.SurfaceTexture;
-import android.view.Surface;
-import java.nio.IntBuffer;
-import java.util.*;
+
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 
-public class TestGlRenderer implements GLSurfaceView.Renderer {
+public class GlTextureRenderer {
 
   /* -------------------------------------------------------------- */
-
+  
   private static final String FULLSCREEN_VS = ""
     + "attribute vec2 a_pos;\n"
     + "attribute vec2 a_tex;\n"
@@ -28,27 +35,23 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
   private static final String FULLSCREEN_FS = ""
     + "precision mediump float;\n"
     + "varying vec2 v_tex;\n"
+    + "uniform sampler2D u_tex;\n"
     + "void main() {\n"
-    + "  gl_FragColor = vec4(v_tex.x, v_tex.y, 0.0, 1.0);\n"
-    + "  gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n"
-    + "  if(mod(gl_FragCoord.x, 2.0) < 1.0) {\n"
-    + "    gl_FragColor.rgb = vec3(1.0, 0.0, 0.0);\n"
-    + "  }\n"
+    + "  vec4 tc = texture2D(u_tex, v_tex);\n"
+    + "  gl_FragColor = tc;\n"
     + "}"
     + "";
 
+  /* -------------------------------------------------------------- */
+  
   private GlShader fullscreen_vs;
   private GlShader fullscreen_fs;
   private GlProgram fullscreen_prog;
   private GlVbo fullscreen_vbo;
-  private GlRenderToTexture rtt;
-  private GlTextureRenderer texture_renderer;
 
   /* -------------------------------------------------------------- */
   
-  public void onSurfaceCreated(GL10 unused, EGLConfig config) {
-
-    GLES20.glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+  public void create() {
 
     if (null == fullscreen_vs) {
       fullscreen_vs = new GlShader();
@@ -85,43 +88,25 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
       fullscreen_vbo.create();
       fullscreen_vbo.uploadStaticData(verts);
     }
-
-    if (null == rtt) {
-      rtt = new GlRenderToTexture();
-      rtt.create(3840, 2160);
-    }
-
-    if (null == texture_renderer) {
-      texture_renderer = new GlTextureRenderer();
-      texture_renderer.create();
-    }
-
-    Log.v("msg", "Vertex shader: " +fullscreen_vs.getId());
-    Log.v("msg", "Fragment shader: " +fullscreen_fs.getId());
-    Log.v("msg", "Program: " +fullscreen_prog.getId());
-    Log.v("msg", "VBO: " +fullscreen_vbo.getId());
   }
 
-  public void onDrawFrame(GL10 unused) {
-
-    rtt.beginCapture();
-    {
-      fullscreen_prog.use();
-      fullscreen_vbo.bind();
-      fullscreen_prog.enableAttrib(0);
-      fullscreen_prog.enableAttrib(1);
-      fullscreen_vbo.vertexAttribPointer(0, 2, GLES20.GL_FLOAT, true, 16, 0); /* pos */
-      fullscreen_vbo.vertexAttribPointer(1, 2, GLES20.GL_FLOAT, true, 16, 8); /* tex */
-      fullscreen_vbo.drawTriangleStrip(0, 4);
-    }
-    rtt.endCapture();
-
-    texture_renderer.draw(rtt.getTextureId(), 0, 0, 1920, 1080);
+  public void draw(int texId) {
+    
+    GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId);
+    
+    fullscreen_prog.use();
+    fullscreen_vbo.bind();
+    fullscreen_prog.enableAttrib(0);
+    fullscreen_prog.enableAttrib(1);
+    fullscreen_vbo.vertexAttribPointer(0, 2, GLES20.GL_FLOAT, true, 16, 0); /* pos */
+    fullscreen_vbo.vertexAttribPointer(1, 2, GLES20.GL_FLOAT, true, 16, 8); /* tex */
+    fullscreen_vbo.drawTriangleStrip(0, 4);
   }
-
-  public void onSurfaceChanged(GL10 unused, int width, int height) {
-    GLES20.glViewport(0, 0, width, height);
-
-    Log.v("msg", String.format("> surface changed %d x %d", width, height));
+  
+  public void draw(int texId, int x, int y, int w, int h) {
+    GLES20.glViewport(x, y, w, h);
+    draw(texId);
   }
 };
+
