@@ -33,6 +33,9 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
     + "void main() {\n"
     + "  vec4 tc = texture2D(u_tex, v_tex);\n"
     + "  gl_FragColor = vec4(v_tex.x, v_tex.y, 1.0, 1.0);\n"
+    + "  if(mod(gl_FragCoord.x, 2.0) == 0.0) {\n"
+    + "    gl_FragColor.rgb = vec3(0.0, 1.0, 0.0);\n"
+    + "  }\n"
     + "}"
     + "";
 
@@ -41,7 +44,6 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
   private GlProgram fullscreen_prog;
   private GlVbo fullscreen_vbo;
 
-  
   /* -------------------------------------------------------------- */
   
   public void onSurfaceCreated(GL10 unused, EGLConfig config) {
@@ -104,5 +106,7 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
 
   public void onSurfaceChanged(GL10 unused, int width, int height) {
     GLES20.glViewport(0, 0, width, height);
+
+    Log.v("msg", String.format("> surface changed %d x %d", width, height));
   }
 };
