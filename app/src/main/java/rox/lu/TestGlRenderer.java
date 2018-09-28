@@ -16,7 +16,7 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
 
   /* -------------------------------------------------------------- */
 
-  private static final String FULLSCREEN_VS = ""
+  private static final String FILTER_VS = ""
     + "attribute vec2 a_pos;\n"
     + "attribute vec2 a_tex;\n"
     + "varying vec2 v_tex;\n"
@@ -25,7 +25,7 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
     + "  v_tex = a_tex;\n"
     + "}\n";
 
-  private static final String FULLSCREEN_FS = ""
+  private static final String FILTER_FS = ""
     + "precision mediump float;\n"
     + "varying vec2 v_tex;\n"
     + "void main() {\n"
@@ -37,10 +37,10 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
     + "}"
     + "";
 
-  private GlShader fullscreen_vs;
-  private GlShader fullscreen_fs;
-  private GlProgram fullscreen_prog;
-  private GlVbo fullscreen_vbo;
+  private GlShader filter_vs;
+  private GlShader filter_fs;
+  private GlProgram filter_prog;
+  private GlVbo filter_vbo;
   private GlRenderToTexture rtt;
   private GlTextureRenderer texture_renderer;
 
@@ -50,29 +50,29 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
 
     GLES20.glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
 
-    if (null == fullscreen_vs) {
-      fullscreen_vs = new GlShader();
-      fullscreen_vs.createVertexShader(FULLSCREEN_VS);
+    if (null == filter_vs) {
+      filter_vs = new GlShader();
+      filter_vs.createVertexShader(FILTER_VS);
     }
     
-    if (null == fullscreen_fs) {
-      fullscreen_fs = new GlShader();
-      fullscreen_fs.createFragmentShader(FULLSCREEN_FS);
+    if (null == filter_fs) {
+      filter_fs = new GlShader();
+      filter_fs.createFragmentShader(FILTER_FS);
     }
 
-    if (null == fullscreen_prog) {
-      fullscreen_prog = new GlProgram();
-      fullscreen_prog.create();
-      fullscreen_prog.attachShader(fullscreen_vs.getId());
-      fullscreen_prog.attachShader(fullscreen_fs.getId());
-      fullscreen_prog.bindAttribLocation("a_pos", 0);
-      fullscreen_prog.bindAttribLocation("a_tex", 1);
-      fullscreen_prog.link();
-      fullscreen_prog.use();
-      fullscreen_prog.uniform1i("u_tex", 0);
+    if (null == filter_prog) {
+      filter_prog = new GlProgram();
+      filter_prog.create();
+      filter_prog.attachShader(filter_vs.getId());
+      filter_prog.attachShader(filter_fs.getId());
+      filter_prog.bindAttribLocation("a_pos", 0);
+      filter_prog.bindAttribLocation("a_tex", 1);
+      filter_prog.link();
+      filter_prog.use();
+      filter_prog.uniform1i("u_tex", 0);
     }
 
-    if (null == fullscreen_vbo) {
+    if (null == filter_vbo) {
       
       float[] verts = {
        -1.0f,  1.0f, 0.0f, 1.0f,   /* top left */
@@ -81,14 +81,27 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
         1.0f, -1.0f, 1.0f, 0.0f    /* bottom right */
       };
 
-      fullscreen_vbo = new GlVbo();
-      fullscreen_vbo.create();
-      fullscreen_vbo.uploadStaticData(verts);
+      filter_vbo = new GlVbo();
+      filter_vbo.create();
+      filter_vbo.uploadStaticData(verts);
     }
 
     if (null == rtt) {
       rtt = new GlRenderToTexture();
+
+      /* 
+         When applying the shader/filter (see above, FILTER_FS), on a
+         MiBox MDZ-16-AB we run into what I suspect to be a floating point
+         precision issue. See this image for the result that we get:
+         https://imgur.com/a/JeAZq6t
+       */
       rtt.create(3840, 2160);
+
+      /* 
+         Using a resolution of 1920 x 1080, gives "reasonable"
+         results on MiBox MDZ-16-AB. See https://imgur.com/0LfUBP5
+      */
+      //rtt.create(1920, 1080);
     }
 
     if (null == texture_renderer) {
@@ -96,23 +109,23 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
       texture_renderer.create();
     }
 
-    Log.v("msg", "Vertex shader: " +fullscreen_vs.getId());
-    Log.v("msg", "Fragment shader: " +fullscreen_fs.getId());
-    Log.v("msg", "Program: " +fullscreen_prog.getId());
-    Log.v("msg", "VBO: " +fullscreen_vbo.getId());
+    Log.v("msg", "Vertex shader: " +filter_vs.getId());
+    Log.v("msg", "Fragment shader: " +filter_fs.getId());
+    Log.v("msg", "Program: " +filter_prog.getId());
+    Log.v("msg", "VBO: " +filter_vbo.getId());
   }
 
   public void onDrawFrame(GL10 unused) {
 
     rtt.beginCapture();
     {
-      fullscreen_prog.use();
-      fullscreen_vbo.bind();
-      fullscreen_prog.enableAttrib(0);
-      fullscreen_prog.enableAttrib(1);
-      fullscreen_vbo.vertexAttribPointer(0, 2, GLES20.GL_FLOAT, true, 16, 0); /* pos */
-      fullscreen_vbo.vertexAttribPointer(1, 2, GLES20.GL_FLOAT, true, 16, 8); /* tex */
-      fullscreen_vbo.drawTriangleStrip(0, 4);
+      filter_prog.use();
+      filter_vbo.bind();
+      filter_prog.enableAttrib(0);
+      filter_prog.enableAttrib(1);
+      filter_vbo.vertexAttribPointer(0, 2, GLES20.GL_FLOAT, true, 16, 0); /* pos */
+      filter_vbo.vertexAttribPointer(1, 2, GLES20.GL_FLOAT, true, 16, 8); /* tex */
+      filter_vbo.drawTriangleStrip(0, 4);
     }
     rtt.endCapture();
 
