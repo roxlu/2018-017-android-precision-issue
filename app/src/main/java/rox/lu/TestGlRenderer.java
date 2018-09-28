@@ -26,15 +26,12 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
     + "}\n";
 
   private static final String FULLSCREEN_FS = ""
-    + "#extension GL_OES_EGL_image_external : require\n"
     + "precision mediump float;\n"
-    + "uniform samplerExternalOES u_tex;\n"
     + "varying vec2 v_tex;\n"
     + "void main() {\n"
-    + "  vec4 tc = texture2D(u_tex, v_tex);\n"
-    + "  gl_FragColor = vec4(v_tex.x, v_tex.y, 1.0, 1.0);\n"
+    + "  gl_FragColor = vec4(v_tex.x, v_tex.y, 0.0, 1.0);\n"
     + "  if(mod(gl_FragCoord.x, 2.0) == 0.0) {\n"
-    + "    gl_FragColor.rgb = vec3(0.0, 1.0, 0.0);\n"
+    + "    gl_FragColor.rgb = vec3(1.0, 1.0, 1.0);\n"
     + "  }\n"
     + "}"
     + "";
@@ -75,10 +72,10 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
     if (null == fullscreen_vbo) {
       
       float[] verts = {
-        -1.0f,  1.0f, 0.0f, 0.0f,
-        -1.0f, -1.0f, 0.0f, 1.0f,
-        1.0f,  1.0f, 1.0f, 0.0f,
-        1.0f, -1.0f, 1.0f, 1.0f
+       -1.0f,  1.0f, 0.0f, 1.0f,  /* top left */
+       -1.0f, -1.0f, 0.0f, 0.0f,  /* bottom left */
+        1.0f,  1.0f, 1.0f, 1.0f,   /* top right */
+        1.0f, -1.0f, 1.0f, 0.0f    /* bottom right */
       };
 
       fullscreen_vbo = new GlVbo();
