@@ -8,6 +8,7 @@ import android.opengl.GLES11Ext;
 import android.graphics.SurfaceTexture;
 import android.view.Surface;
 import java.nio.IntBuffer;
+import java.nio.ByteBuffer;
 import java.util.*;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -17,9 +18,10 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
   /* -------------------------------------------------------------- */
 
   private static final String FILTER_VS = ""
+    + "precision highp float;\n"
     + "attribute vec2 a_pos;\n"
-    + "attribute vec2 a_tex;\n"
-    + "varying vec2 v_tex;\n"
+    + "attribute highp vec2 a_tex;\n"
+    + "varying highp vec2 v_tex;\n"
     + "void main() {\n"
     + "  gl_Position = vec4(a_pos.x, a_pos.y, 0.0, 1.0);\n"
     + "  v_tex = a_tex;\n"
@@ -27,13 +29,17 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
 
   private static final String FILTER_FS = ""
     + "precision mediump float;\n"
+    + "uniform sampler2D u_lookup_tex;\n"
     + "varying vec2 v_tex;\n"
     + "void main() {\n"
     + "  gl_FragColor = vec4(v_tex.x, v_tex.y, 0.0, 1.0);\n"
+    /*
     + "  gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n"
     + "  if(mod(gl_FragCoord.x, 2.0) < 1.0) {\n"
     + "    gl_FragColor.rgb = vec3(1.0, 0.0, 0.0);\n"
     + "  }\n"
+    */
+    + "  gl_FragColor.rgb = texture2D(u_lookup_tex, v_tex).rgb;\n"
     + "}"
     + "";
 
@@ -43,6 +49,13 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
   private GlVbo filter_vbo;
   private GlRenderToTexture rtt;
   private GlTextureRenderer texture_renderer;
+  private IntBuffer lookup_tex = IntBuffer.allocate(1);
+  private int buffer_width = 3840;
+  private int buffer_height = 2160;
+  /*
+  private int buffer_width = 1920;
+  private int buffer_height = 1080;
+  */
 
   /* -------------------------------------------------------------- */
   
@@ -69,7 +82,7 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
       filter_prog.bindAttribLocation("a_tex", 1);
       filter_prog.link();
       filter_prog.use();
-      filter_prog.uniform1i("u_tex", 0);
+      filter_prog.uniform1i("u_lookup_tex", 0);
     }
 
     if (null == filter_vbo) {
@@ -86,22 +99,18 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
       filter_vbo.uploadStaticData(verts);
     }
 
+    /* Create the lookup table that we use to try and solve the precision issue. */
+    createLookupTexture(buffer_width);
+
     if (null == rtt) {
       rtt = new GlRenderToTexture();
 
       /* 
          When applying the shader/filter (see above, FILTER_FS), on a
          MiBox MDZ-16-AB we run into what I suspect to be a floating point
-         precision issue. See this image for the result that we get:
-         https://imgur.com/a/JeAZq6t
+         precision issue. 
        */
-      rtt.create(3840, 2160);
-
-      /* 
-         Using a resolution of 1920 x 1080, gives "reasonable"
-         results on MiBox MDZ-16-AB. See https://imgur.com/0LfUBP5
-      */
-      //rtt.create(1920, 1080);
+      rtt.create(buffer_width, buffer_height);
     }
 
     if (null == texture_renderer) {
@@ -114,11 +123,17 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
     Log.v("msg", "Program: " +filter_prog.getId());
     Log.v("msg", "VBO: " +filter_vbo.getId());
   }
-
+  
+  /* -------------------------------------------------------------- */
+  
   public void onDrawFrame(GL10 unused) {
 
     rtt.beginCapture();
     {
+      /* Bind our lookup texture with the black/white changing pixels. */
+      GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+      GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, lookup_tex.get(0));
+
       filter_prog.use();
       filter_vbo.bind();
       filter_prog.enableAttrib(0);
@@ -137,4 +152,28 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
 
     Log.v("msg", String.format("> surface changed %d x %d", width, height));
   }
+
+  /* -------------------------------------------------------------- */
+  
+  private void createLookupTexture(int width) {
+        
+    /* Create the buffer where each odd column is set to 0x00 and each even column is set to 0xFF. */
+    byte[] pixels = new byte[width];
+    for (int i = 0; i < width; ++i) {
+      pixels[i] = (byte)(i % 2 == 0 ? 0x00 : 0xFF) ;
+    }
+
+    GLES20.glGenTextures(1, lookup_tex);
+    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, lookup_tex.get(0));
+    GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_LUMINANCE, width, 1, 0, GLES20.GL_LUMINANCE, GLES20.GL_UNSIGNED_BYTE, ByteBuffer.wrap(pixels));
+    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
+    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
+
+    Log.v("msg", "Update the lookup textures.");
+  }
+  
+  /* -------------------------------------------------------------- */
+
 };
