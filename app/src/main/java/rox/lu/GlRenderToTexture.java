@@ -88,5 +88,8 @@ public class GlRenderToTexture {
     return tex_id.get(0);
   }
 
+  public void bind() {
+    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo_id.get(0));
+  }
 
 };

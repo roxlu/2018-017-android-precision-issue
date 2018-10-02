@@ -1,20 +1,33 @@
 package rox.lu;
 
 import android.content.Context;
-import android.opengl.GLES20;
-import android.util.Log;
-import android.opengl.GLSurfaceView;
-import android.opengl.GLES11Ext;
+import android.graphics.Bitmap;
 import android.graphics.SurfaceTexture;
+import android.graphics.SurfaceTexture;
+import android.media.MediaCodec;
+import android.media.MediaExtractor;
+import android.media.MediaFormat;
+import android.opengl.GLES11Ext;
+import android.opengl.GLES20;
+import android.opengl.GLSurfaceView;
+import android.os.Environment;
+import android.util.Log;
 import android.view.Surface;
-import java.nio.IntBuffer;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.IntBuffer;
 import java.util.*;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 public class TestGlRenderer implements GLSurfaceView.Renderer {
 
+  
   /* -------------------------------------------------------------- */
 
   private static final String FILTER_VS = ""
@@ -30,16 +43,13 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
   private static final String FILTER_FS = ""
     + "precision mediump float;\n"
     + "uniform sampler2D u_lookup_tex;\n"
-    + "varying vec2 v_tex;\n"
+    + "varying highp vec2 v_tex;\n"
     + "void main() {\n"
-    + "  gl_FragColor = vec4(v_tex.x, v_tex.y, 0.0, 1.0);\n"
-    /*
     + "  gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n"
-    + "  if(mod(gl_FragCoord.x, 2.0) < 1.0) {\n"
+    + "  vec3 lookup_col = texture2D(u_lookup_tex, v_tex).rgb;\n"
+    + "  if (lookup_col.r == 1.0) {\n"
     + "    gl_FragColor.rgb = vec3(1.0, 0.0, 0.0);\n"
     + "  }\n"
-    */
-    + "  gl_FragColor.rgb = texture2D(u_lookup_tex, v_tex).rgb;\n"
     + "}"
     + "";
 
@@ -52,10 +62,14 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
   private IntBuffer lookup_tex = IntBuffer.allocate(1);
   private int buffer_width = 3840;
   private int buffer_height = 2160;
-  /*
-  private int buffer_width = 1920;
-  private int buffer_height = 1080;
-  */
+  private boolean did_create_output_file = false;
+  private Context context = null;
+  
+  /* -------------------------------------------------------------- */
+
+  public void setContext(Context ctx) {
+    context = ctx;
+  }
 
   /* -------------------------------------------------------------- */
   
@@ -88,8 +102,8 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
     if (null == filter_vbo) {
       
       float[] verts = {
-       -1.0f,  1.0f, 0.0f, 1.0f,   /* top left */
-       -1.0f, -1.0f, 0.0f, 0.0f,   /* bottom left */
+        -1.0f,  1.0f, 0.0f, 1.0f,  /* top left */
+        -1.0f, -1.0f, 0.0f, 0.0f,  /* bottom left */
         1.0f,  1.0f, 1.0f, 1.0f,   /* top right */
         1.0f, -1.0f, 1.0f, 0.0f    /* bottom right */
       };
@@ -109,7 +123,7 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
          When applying the shader/filter (see above, FILTER_FS), on a
          MiBox MDZ-16-AB we run into what I suspect to be a floating point
          precision issue. 
-       */
+      */
       rtt.create(buffer_width, buffer_height);
     }
 
@@ -145,6 +159,27 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
     rtt.endCapture();
 
     texture_renderer.draw(rtt.getTextureId(), 0, 0, 1920, 1080);
+
+    /* 
+       After we've rendered into our texture we download the
+       result and save it into a uncompressed PNG file. We cannot
+       simply render the result to a destination framebuffer with
+       a resolution of 1920 x 1080 because the min/mag filters
+       that are applied then, will distort the result.
+    */
+    if (false == did_create_output_file) {
+      try {
+        File sdcard = Environment.getExternalStorageDirectory();
+        File file = new File(sdcard, "output.png");
+        saveOutputTextureAsPng(buffer_width, buffer_height, file.toString());
+      }
+      catch (IOException ex) {
+        ex.printStackTrace();
+        Log.v("msg", "Failed to save the generated texture into output.png." + ex.getMessage());
+
+      }
+      did_create_output_file = true;      
+    }
   }
 
   public void onSurfaceChanged(GL10 unused, int width, int height) {
@@ -172,6 +207,42 @@ public class TestGlRenderer implements GLSurfaceView.Renderer {
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
 
     Log.v("msg", "Update the lookup textures.");
+  }
+
+  /*
+    See https://stackoverflow.com/questions/25348674/convert-opengl-es-2-0-rendered-texture-to-bitmap-and-back
+  */
+  public void saveOutputTextureAsPng(int sourceWidth, int sourceHeight, String filename) throws IOException {
+    
+    ByteBuffer pixel_buffer;
+    pixel_buffer = ByteBuffer.allocateDirect(sourceWidth * sourceHeight * 4);
+    pixel_buffer.order(ByteOrder.LITTLE_ENDIAN);
+
+    /* 
+       We bind the framebuffer into which we render our shader
+       result. This allows us to download the generated texture
+       data. The downloaded texture data holds the result of the
+       shader that we defined above `FILTER_FS`.
+    */
+    rtt.bind();
+    GLES20.glReadPixels(0, 0, sourceWidth, sourceHeight, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixel_buffer);
+
+    BufferedOutputStream bos = null;
+    try {
+      bos = new BufferedOutputStream(new FileOutputStream(filename));
+      Bitmap bmp = Bitmap.createBitmap(sourceWidth, sourceHeight, Bitmap.Config.ARGB_8888);
+      pixel_buffer.rewind();
+      bmp.copyPixelsFromBuffer(pixel_buffer);
+      bmp.compress(Bitmap.CompressFormat.PNG, 100, bos);
+      bmp.recycle();
+    }
+    finally {
+      if (bos != null) {
+        bos.close();
+      }
+    }
+    
+    Log.d("msg", "Saved " + sourceWidth + "x" + sourceHeight + " frame as '" + filename + "'");
   }
   
   /* -------------------------------------------------------------- */

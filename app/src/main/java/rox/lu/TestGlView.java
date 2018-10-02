@@ -24,6 +24,7 @@ public class TestGlView extends GLSurfaceView {
     super(context, attrs);
     setEGLContextClientVersion(2);
     renderer = new TestGlRenderer();
+    renderer.setContext(context);
     setRenderer(renderer);
 
     Log.v("msg", "Create TestGlView");
